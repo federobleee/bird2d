@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Bird Clone</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #70c5ce;
+            overflow: hidden;
+        }
+        .container {
+            position: relative;
+            width: 400px;
+            height: 600px;
+            overflow: hidden;
+            background-color: #70c5ce;
+        }
+        .bird {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: yellow;
+            border-radius: 50%;
+            top: 50%;
+            left: 50px;
+        }
+        .pipe {
+            position: absolute;
+            width: 60px;
+            background-color: green;
+            bottom: 0;
+        }
+        .topPipe {
+            position: absolute;
+            width: 60px;
+            background-color: green;
+            top: 0;
+        }
+        .score, .timer {
+            position: absolute;
+            top: 10px;
+            font-size: 24px;
+            color: white;
+        }
+        .score {
+            left: 10px;
+        }
+        .timer {
+            right: 10px;
+        }
+        .record {
+            position: absolute;
+            bottom: 10px; /* Ajuste para estar en la parte inferior */
+            left: 10px; /* Ajuste para estar a la izquierda */
+            font-size: 24px;
+            color: white;
+        }
+        #pauseButton {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            background-color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .cloud {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="game">
+        <div class="score" id="score">Puntaje: 0</div>
+        <div class="timer" id="timer">Tiempo: 0</div>
+        <div class="record" id="record">Tu récord: 0</div>
+        <div class="bird" id="bird"></div>
+        <button id="pauseButton">Pausar</button>
+        <div id="clouds"></div>
+    </div>
+    <script>
+        const bird = document.getElementById('bird');
+        const game = document.getElementById('game');
+        const scoreDisplay = document.getElementById('score');
+        const timerDisplay = document.getElementById('timer');
+        const recordDisplay = document.getElementById('record');
+        const pauseButton = document.getElementById('pauseButton');
+        let birdY = 250;
+        let gravity = 2;
+        let jump = -30;
+        let gameRunning = true;
+        let pipes = [];
+        let score = 0;
+        let timer = 0;
+        let gameInterval;
+        let isPaused = false;
+        let highScore = localStorage.getItem('highScore') ? parseInt(localStorage.getItem('highScore')) : 0;
+
+        recordDisplay.textContent = `Tu récord: ${highScore}`;
+
+        function createCloud() {
+            const cloud = document.createElement('div');
+            cloud.classList.add('cloud');
+            cloud.style.width = Math.random() * 60 + 40 + 'px'; // Ancho aleatorio entre 40 y 100px
+            cloud.style.height = Math.random() * 20 + 30 + 'px'; // Alto aleatorio entre 30 y 50px
+            cloud.style.left = Math.random() * (game.clientWidth - 100) + 'px'; // Posición horizontal aleatoria
+            cloud.style.top = Math.random() * 200 + 'px'; // Posición vertical aleatoria
+            game.appendChild(cloud);
+
+            // Mover la nube de izquierda a derecha
+            let cloudMovement = setInterval(() => {
+                const cloudPosition = parseFloat(cloud.style.left);
+                if (cloudPosition > game.clientWidth) {
+                    clearInterval(cloudMovement);
+                    cloud.remove();
+                } else {
+                    cloud.style.left = (cloudPosition + 1) + 'px';
+                }
+            }, 20);
+        }
+
+        function changeBirdColor(score) {
+            if (score >= 400) {
+                bird.style.backgroundColor = 'white';
+            } else if (score >= 300) {
+                bird.style.backgroundColor = 'red';
+            } else if (score >= 200) {
+                bird.style.backgroundColor = 'violet';
+            } else if (score >= 100) {
+                bird.style.backgroundColor = 'blue';
+            }
+        }
+
+        function startGame() {
+            if (!isPaused) {
+                birdY += gravity; // Aplicar gravedad para que el pájaro baje
+                bird.style.top = birdY + 'px';
+
+                if (birdY >= 560) {
+                    endGame();
+                }
+
+                pipes.forEach(pipe => {
+                    pipe.style.left = (parseInt(pipe.style.left) - 2) + 'px';
+                    if (parseInt(pipe.style.left) < -60) {
+                        pipe.remove();
+                        pipes.shift();
+                        score++;
+                        scoreDisplay.textContent = `Puntaje: ${score}`;
+
+                        // Cambiar color del pájaro según el puntaje
+                        changeBirdColor(score);
+
+                        // Actualizar el récord
+                        if (score > highScore) {
+                            highScore = score;
+                            localStorage.setItem('highScore', highScore); // Guardar el nuevo récord
+                            recordDisplay.textContent = `Tu récord: ${highScore}`;
+                        }
+                    }
+                    if (detectCollision(pipe)) {
+                        endGame();
+                    }
+                });
+            }
+        }
+
+        function jumpBird() {
+            birdY += jump; // Hacer que el pájaro suba
+            if (birdY < 0) birdY = 0; // Evitar que el pájaro suba más allá del límite superior
+        }
+
+        function dropBird() {
+            birdY += 10; // Hacer que el pájaro baje
+            if (birdY >= 560) birdY = 560; // Evitar que el pájaro baje más allá del límite inferior
+        }
+
+        function detectCollision(pipe) {
+            const birdRect = bird.getBoundingClientRect();
+            const pipeRect = pipe.getBoundingClientRect();
+            return (
+                birdRect.left < pipeRect.right &&
+                birdRect.right > pipeRect.left &&
+                birdRect.top < pipeRect.bottom &&
+                birdRect.bottom > pipeRect.top
+            );
+        }
+
+        function endGame() {
+            gameRunning = false;
+            clearInterval(gameInterval);
+            alert(`Juego terminado! Puntaje: ${score} | Tiempo: ${timer} segundos`);
+            location.reload();
+        }
+
+        function createPipe() {
+            const pipeHeight = Math.random() * (300 - 100) + 100;
+            const topPipeHeight = 600 - pipeHeight - 150;
+
+            const pipe = document.createElement('div');
+            pipe.classList.add('pipe');
+            pipe.style.height = pipeHeight + 'px';
+            pipe.style.left = '400px';
+            game.appendChild(pipe);
+            pipes.push(pipe);
+
+            const topPipe = document.createElement('div');
+            topPipe.classList.add('topPipe');
+            topPipe.style.height = topPipeHeight + 'px';
+            topPipe.style.left = '400px';
+            topPipe.style.bottom = (600 - topPipeHeight) + 'px';
+            game.appendChild(topPipe);
+            pipes.push(topPipe);
+        }
+
+        function updateTimer() {
+            if (gameRunning && !isPaused) {
+                timer++;
+                timerDisplay.textContent = `Tiempo: ${timer}`;
+            }
+        }
+
+        gameInterval = setInterval(() => {
+            if (gameRunning) {
+                startGame();
+            }
+        }, 20);
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === "ArrowUp") {
+                jumpBird();
+            }
+            if (event.key === "ArrowDown") {
+                dropBird();
+            }
+            if (event.key === "p" || event.key === "P") { // Pausar con "p"
+                togglePause();
+            }
+        });
+
+        pauseButton.addEventListener('click', togglePause);
+
+        function togglePause() {
+            isPaused = !isPaused;
+            pauseButton.textContent = isPaused ? 'Reanudar' : 'Pausar';
+        }
+
+        // Crear nubes cada 3 segundos
+        setInterval(createCloud, 3000);
+        setInterval(createPipe, 2000);
+        setInterval(updateTimer, 1000);
+    </script>
+</body>
+</html>
